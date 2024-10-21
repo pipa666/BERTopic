@@ -478,23 +478,22 @@ class BERTopic:
         if documents.Document.values[0] is None:
             custom_documents = self._images_to_text(documents, embeddings)
 
-            # Extract topics by calculating c-TF-IDF
-            self._extract_topics(custom_documents, embeddings=embeddings)
-            self._create_topic_vectors(documents=documents, embeddings=embeddings)
-
-            # Reduce topics
+            # Reduce topics if needed, extract topics by calculating c-TF-IDF, and get representations.
             if self.nr_topics:
                 custom_documents = self._reduce_topics(custom_documents)
+            else:
+                self._extract_topics(custom_documents, embeddings=embeddings, verbose=self.verbose)
+            self._create_topic_vectors(documents=documents, embeddings=embeddings)
 
             # Save the top 3 most representative documents per topic
             self._save_representative_docs(custom_documents)
-        else:
-            # Extract topics by calculating c-TF-IDF
-            self._extract_topics(documents, embeddings=embeddings, verbose=self.verbose)
 
-            # Reduce topics
+        else:
+            # Reduce topics if needed, extract topics by calculating c-TF-IDF, and get representations.
             if self.nr_topics:
                 documents = self._reduce_topics(documents)
+            else:
+                self._extract_topics(documents, embeddings=embeddings, verbose=self.verbose)
 
             # Save the top 3 most representative documents per topic
             self._save_representative_docs(documents)
@@ -4345,11 +4344,18 @@ class BERTopic:
             documents: Updated dataframe with documents and the reduced number of Topics
         """
         logger.info("Topic reduction - Reducing number of topics")
-        initial_nr_topics = len(self.get_topics())
+        initial_nr_topics = len(documents["Topic"].unique())
 
         if isinstance(self.nr_topics, int):
             if self.nr_topics < initial_nr_topics:
                 documents = self._reduce_to_n_topics(documents, use_ctfidf)
+            else:
+                logger.info(
+                    f"Topic reduction - Number of topics ({self.nr_topics}) is equal or higher than the clustered topics({len(documents['Topic'].unique())})."
+                )
+                documents = self._sort_mappings_by_frequency(documents)
+                self._extract_topics(documents, verbose=self.verbose)
+                return documents
         elif isinstance(self.nr_topics, str):
             documents = self._auto_reduce_topics(documents, use_ctfidf)
         else:
@@ -4412,7 +4418,7 @@ class BERTopic:
 
         # Update representations
         documents = self._sort_mappings_by_frequency(documents)
-        self._extract_topics(documents, mappings=mappings)
+        self._extract_topics(documents, mappings=mappings, verbose=self.verbose)
 
         self._update_topic_size(documents)
         return documents
@@ -4468,7 +4474,7 @@ class BERTopic:
         # Update documents and topics
         self.topic_mapper_.add_mappings(mapped_topics, topic_model=self)
         documents = self._sort_mappings_by_frequency(documents)
-        self._extract_topics(documents, mappings=mappings)
+        self._extract_topics(documents, mappings=mappings, verbose=self.verbose)
         self._update_topic_size(documents)
         return documents
 
